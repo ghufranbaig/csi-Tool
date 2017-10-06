@@ -11,7 +11,7 @@ do
 done
 echo "setting injection mode ok"
 sleep 1
-iw dev mon0 del 2>/dev/null 1>/dev/null
+#iw dev mon0 del 2>/dev/null 1>/dev/null
 iw dev wlan0 interface add mon0 type monitor
 ifconfig mon0 up
 echo "setting injection mon0"

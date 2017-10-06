@@ -19,3 +19,10 @@ echo "monitor mode successfully set"
 ifconfig wlan0 up
 sleep 1
 echo "open wlan0"
+
+iw dev wlan0 interface add mon0 type monitor
+ifconfig mon0 up
+echo "setting injection mon0"
+sleep 1
+echo 0x4101 | sudo tee /sys/kernel/debug/ieee80211/phy0/iwlwifi/iwldvm/debug/monitor_tx_rate
+
