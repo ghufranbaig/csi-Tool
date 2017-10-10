@@ -7,8 +7,14 @@ for i in ${channels[@]}; do
 	echo "channel" ${i} "set"
 	outFile="$1${i}.dat"
 	../netlink/log_to_file $outFile &
+	./rcv &
 	./random_packets 1000 1000 1 1000
+	
 	sleep 10
+	kill %-1
 	kill $!
+
+	outFile = "$1seq${i}.txt"
+	mv seqList.txt outFile
 done
 

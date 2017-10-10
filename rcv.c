@@ -137,10 +137,10 @@ static inline void make_ack()
 
 }
 
-void send_ack(int seq)
+void send_ack()
 {
 		struct lorcon_packet *ptr = tx_packet.packet;
-		ptr->seq = seq;
+		ptr->seq = 1001;
 		int ret = tx80211_txpacket(&tx, &tx_packet);
 		if (ret < 0) {
 			fprintf(stderr, "Unable to transmit packet: %s\n",
@@ -224,14 +224,14 @@ int main(int argc, char *argv[])
 		if (numbytes > 25) {
 			if (strncmp(eh->addr1,"\x00\x16\xea\x12\x34\x56",6) == 0 && strncmp(eh->addr2,"\x00\x16\xea\x12\x34\x56",6) == 0
 			&& strncmp(eh->addr3,"\xff\xff\xff\xff\xff\xff",6) == 0){
-
 					
 					curr_seq = eh->seq+1;
 					fprintf(ofile,"%i\n",eh->seq);
-					send_ack(eh->seq);
+					//send_ack();
 					printf ("%i,%i\n",i,eh->seq);
 					i++;
 					recvfrom(sockfd, buf, BUF_SIZ, 0, NULL, NULL);
+
 			}
 
 		

@@ -115,7 +115,7 @@ int main(int argc, char** argv)
 	for (i = 0; i < num_packets; ++i) {
 		payload_memcpy(packet->payload, packet_size,
 				(i*packet_size) % PAYLOAD_SIZE);
-
+		packet->seq = i;
 		if (delay_us) {
 			clock_gettime(CLOCK_MONOTONIC, &now);
 			diff = (now.tv_sec - start.tv_sec) * 1000000 +

@@ -12,5 +12,7 @@ for i in ${channels[@]}; do
 	sleep 5
 	kill %-1
 	kill $!
+	outFile = "$1seq${i}.txt"
+	mv seqList.txt outFile
 done
 
