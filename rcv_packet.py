@@ -54,10 +54,10 @@ def terminal():
       except socket.error:
          pass
       else:
-         if (DMAC(packet) == '0016ea123456'):
-		break
-         #dmac = DMAC(packet)
-         #print dmac
+         #if (DMAC(packet) == '0016ea123456'):
+	 #	break
+         dmac = DMAC(packet)
+         print dmac
       #printPacket(packet, now, "Received:")
 
 terminal()
