@@ -160,7 +160,7 @@ void send_pkt(uint16_t seq,uint16_t chan)
 					tx.errstr);
 			exit(1);
 		}
-		printf("acked\n");
+		printf("sent pkt %u on channel %u\n",seq,chan);
 
 }
 
@@ -196,9 +196,15 @@ int main(int argc, char *argv[])
 	uint8_t buf[BUF_SIZ];
 	char ifName[IFNAMSIZ];
 
+	uint32_t mode=0;// 0: TX, 1: RX
 
-	signal(SIGKILL,sig_handler);
-	signal(SIGTERM,sig_handler);
+	if (argc < 2 || (1 != sscanf(argv[1], "%u", &mode)))
+		mode = 0;
+	
+
+
+	//signal(SIGKILL,sig_handler);
+	//signal(SIGTERM,sig_handler);
 	
 	strcpy(ifName, DEFAULT_IF);
 
@@ -258,10 +264,12 @@ int main(int argc, char *argv[])
 		set_channel(channels[i]);
 		clock_gettime(CLOCK_MONOTONIC, &start);
 		diff = 0;
-		for (j=0;j<numPkt;j++){
-				send_pkt(eh->seq,channels[i]);
-		}
 
+		if (mode == 0){
+			for (j=0;j<numPkt;j++){
+					send_pkt(j,channels[i]);
+			}
+		}
 		int pkts_rcvd = 0;
 		while(diff < interval){
 			numbytes = recvfrom(sockfd, buf, BUF_SIZ, 0, NULL, NULL);
