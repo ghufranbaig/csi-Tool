@@ -56,6 +56,7 @@ struct lorcon_packet
 	u_char	addr3[6];
 	__le16	seq;
 	__le16  chan;
+	__le16  seqNo;
 	u_char	payload[0];
 } __attribute__ ((packed));
 
@@ -69,20 +70,10 @@ struct rx_pkt
 	u_char	addr3[6];
 	__le16	seq;
 	__le16  chan;
+	__le16  seqNo;
 	u_char	payload[0];
 } __attribute__ ((packed));
 
-struct control_packet
-{
-	__le16	fc;
-	__le16	dur;
-	u_char	addr1[6];
-	u_char	addr2[6];
-	u_char	addr3[6];
-	__le16	seq;
-	__le16	next_chan;
-
-} __attribute__ ((packed));
 
 static void init_lorcon()
 {
@@ -152,7 +143,7 @@ static inline void make_pkt()
 void send_pkt(uint16_t seq,uint16_t chan)
 {
 		struct lorcon_packet *ptr = tx_packet.packet;
-		ptr->seq = seq;
+		ptr->seqNo = seq;
 		ptr->chan = chan;
 		int ret = tx80211_txpacket(&tx, &tx_packet);
 		if (ret < 0) {
@@ -238,6 +229,8 @@ int setup_socket(char* ifName) {
 		exit(EXIT_FAILURE);
 	}
 
+	return sockfd;
+
 }
 
 int main(int argc, char *argv[])
@@ -245,8 +238,6 @@ int main(int argc, char *argv[])
 	int sockfd, ret;
 	int sockopt;
 	ssize_t numbytes;
-	//struct ifreq ifopts;	/* set promiscuous mode */
-	//struct ifreq if_ip;	/* get ip addr */
 	uint8_t buf[BUF_SIZ];
 	char ifName[IFNAMSIZ];
 
@@ -259,48 +250,11 @@ int main(int argc, char *argv[])
 	//signal(SIGKILL,sig_handler);
 	//signal(SIGTERM,sig_handler);
 	
-	//strcpy(ifName, DEFAULT_IF);
+	strcpy(ifName, DEFAULT_IF);
 
 	/* Header structures */
 	struct rx_pkt *eh = (struct rx_pkt *) buf;
-
-	//memset(&if_ip, 0, sizeof(struct ifreq));
 	
-/*
-	// Open PF_PACKET socket, listening for EtherType ETHER_TYPE 
-	if ((sockfd = socket(PF_PACKET, SOCK_RAW, htons(ETHER_TYPE))) == -1) {
-		perror("listener: socket");	
-		return -1;
-	}
-
-	// Set interface to promiscuous mode - do we need to do this every time? 
-	strncpy(ifopts.ifr_name, ifName, IFNAMSIZ-1);
-	ioctl(sockfd, SIOCGIFFLAGS, &ifopts);
-	ifopts.ifr_flags |= IFF_PROMISC;
-	ioctl(sockfd, SIOCSIFFLAGS, &ifopts);
-	// Allow the socket to be reused - incase connection is closed prematurely 
-	if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &sockopt, sizeof sockopt) == -1) {
-		perror("setsockopt");
-		close(sockfd);
-		exit(EXIT_FAILURE);
-	}
-	// Make recv non-blocking
-	struct timeval read_timeout;
-	read_timeout.tv_sec = 0;
-	read_timeout.tv_usec = 10;
-	if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof(read_timeout)) == -1)	{
-		perror("SO_BINDTODEVICE");
-		close(sockfd);
-		exit(EXIT_FAILURE);
-	}
-
-	// Bind to device 
-	if (setsockopt(sockfd, SOL_SOCKET, SO_BINDTODEVICE, ifName, IFNAMSIZ-1) == -1)	{
-		perror("SO_BINDTODEVICE");
-		close(sockfd);
-		exit(EXIT_FAILURE);
-	}
-	*/
 	init_lorcon();
 	make_pkt();
 
@@ -329,22 +283,40 @@ int main(int argc, char *argv[])
 						send_pkt(index,channels[i]);
 						index += 1;
 				}
+			} else {
+				if (pkts_rcvd > minPktsToRcv) {
+					send_pkt(0xFF,channels[i]);
+				}
 			}
 			numbytes = recvfrom(sockfd, buf, BUF_SIZ, 0, NULL, NULL);
 			if (numbytes > 25) {
 				if (strncmp(eh->addr1,"\x00\x16\xea\x12\x34\x56",6) == 0 && strncmp(eh->addr2,"\x00\x16\xea\x12\x34\x56",6) == 0
 				&& strncmp(eh->addr3,"\xff\xff\xff\xff\xff\xff",6) == 0){
-						pkts_rcvd += 1;
-						printf ("%i,%i\n",i,eh->seq);
-						recvfrom(sockfd, buf, BUF_SIZ, 0, NULL, NULL);
 
-						if (pkts_rcvd > minPktsToRcv) {
-							break;
+						if (mode == 1) {
+							pkts_rcvd += 1;
+							printf ("%i,%i\n",i,eh->seqNo);
+							recvfrom(sockfd, buf, BUF_SIZ, 0, NULL, NULL);
+
+							clock_gettime(CLOCK_MONOTONIC, &start);
+
+							//if (pkts_rcvd > minPktsToRcv) {
+							//	break;
+							//}
+						} else {
+							if (eh->seqNo == 0xFF){
+								break;
+							}
 						}
 				}
 			}
 			clock_gettime(CLOCK_MONOTONIC, &now);
 			diff = (now.tv_sec - start.tv_sec) * 1000000 + (now.tv_nsec - start.tv_nsec) / 1000;
+
+			if (mode == 1){
+				if (diff > interval && pkts_rcvd > minPktsToRcv)
+					break;
+			}
 
 			//printf("diff %i\n",diff);
 		
