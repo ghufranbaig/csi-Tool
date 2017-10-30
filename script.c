@@ -151,7 +151,7 @@ void send_pkt(uint16_t seq,uint16_t chan)
 					tx.errstr);
 			exit(1);
 		}
-		printf("sent pkt %u on channel %u\n",seq,chan);
+		//printf("sent pkt %u on channel %u\n",seq,chan);
 
 }
 
@@ -233,6 +233,22 @@ int setup_socket(char* ifName) {
 
 }
 
+void close_socket(int sockfd) {
+	int opt = 0;
+	if (setsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, &opt, sizeof(opt)) == -1)	{
+		perror("SO_RCVBUF");
+		close(sockfd);
+		exit(EXIT_FAILURE);
+	}
+	/*	
+	if (close(sockfd) == -1) {
+		perror("SO_CLOSE");
+		close(sockfd);
+		exit(EXIT_FAILURE);
+	}
+	*/
+}
+
 int main(int argc, char *argv[])
 {
 	int sockfd, ret;
@@ -258,14 +274,14 @@ int main(int argc, char *argv[])
 	init_lorcon();
 	make_pkt();
 
-	struct timespec start, now;
+	struct timespec start, now,last_sent,last_rcv;
 
 	uint16_t channels[37]={1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 149, 153, 157, 161, 165};
 
-	int i,j;
+	int i,j,k;
 	int numPkt = 10;
 	uint16_t curr_seq = 0;
-	uint32_t interval = 10e6;
+	uint32_t interval = 10000;
 	int minPktsToRcv = 20;
 	int32_t diff = 0;
 	uint32_t index = 0;
@@ -277,41 +293,46 @@ int main(int argc, char *argv[])
 		int pkts_rcvd = 0;
 
 		sockfd = setup_socket(ifName);
-		while(diff < interval){
-			if (mode == 0){
-				for (j=0;j<numPkt;j++){
+		while(1){
+			clock_gettime(CLOCK_MONOTONIC, &now);
+			diff = (now.tv_sec - last_sent.tv_sec) * 1000000 + (now.tv_nsec - last_sent.tv_nsec) / 1000;
+			if (index == 0 || diff > 100) {
+				if (mode == 0){
 						send_pkt(index,channels[i]);
 						index += 1;
-				}
-			} else {
-				if (pkts_rcvd > minPktsToRcv) {
-					send_pkt(0xFF,channels[i]);
+						clock_gettime(CLOCK_MONOTONIC, &last_sent);
+				} else {
+					if (pkts_rcvd > minPktsToRcv) {
+						send_pkt(0xFFFF,channels[i]);
+						clock_gettime(CLOCK_MONOTONIC, &last_sent);
+					}
 				}
 			}
 			numbytes = recvfrom(sockfd, buf, BUF_SIZ, 0, NULL, NULL);
 			if (numbytes > 25) {
 				if (strncmp(eh->addr1,"\x00\x16\xea\x12\x34\x56",6) == 0 && strncmp(eh->addr2,"\x00\x16\xea\x12\x34\x56",6) == 0
 				&& strncmp(eh->addr3,"\xff\xff\xff\xff\xff\xff",6) == 0){
-
+						printf ("%i,%i,%i\n",channels[i],eh->chan,eh->seqNo);
 						if (mode == 1) {
 							pkts_rcvd += 1;
-							printf ("%i,%i\n",i,eh->seqNo);
-							recvfrom(sockfd, buf, BUF_SIZ, 0, NULL, NULL);
-
-							clock_gettime(CLOCK_MONOTONIC, &start);
+							clock_gettime(CLOCK_MONOTONIC, &last_rcv);
 
 							//if (pkts_rcvd > minPktsToRcv) {
 							//	break;
 							//}
 						} else {
-							if (eh->seqNo == 0xFF){
-								break;
+							if (eh->seqNo == 0xFFFF){
+								for (k=0; k<10;k++)
+									send_pkt(0xFFFF,channels[i]);
 							}
 						}
+						if (eh->seqNo == 0xFFFF)
+							break;
+						recvfrom(sockfd, buf, BUF_SIZ, 0, NULL, NULL);
 				}
 			}
 			clock_gettime(CLOCK_MONOTONIC, &now);
-			diff = (now.tv_sec - start.tv_sec) * 1000000 + (now.tv_nsec - start.tv_nsec) / 1000;
+			diff = (now.tv_sec - last_rcv.tv_sec) * 1000000 + (now.tv_nsec - last_rcv.tv_nsec) / 1000;
 
 			if (mode == 1){
 				if (diff > interval && pkts_rcvd > minPktsToRcv)
@@ -322,7 +343,8 @@ int main(int argc, char *argv[])
 		
 		}
 
-		close(sockfd);
+		close_socket(sockfd);
+		
 
 	}
 
