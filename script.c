@@ -181,37 +181,28 @@ void set_channel(int chan) {
 
 	printf("%s\n",command);
 
+	system(command);
+
+	command[0]='\0';	
+	strcat(command,"iw wlan0 set channel ");
+	strcat(command,snum);
+	strcat(command," HT20");
+
+	printf("%s\n",command);
+
 	system(command);	
 
 	printf("channel set to %i \n",chan);
 }
 
-int main(int argc, char *argv[])
-{
-	int sockfd, ret;
+int setup_socket(char* ifName) {
+
+	int sockfd;
+	//char ifName[IFNAMSIZ];
 	int sockopt;
-	ssize_t numbytes;
 	struct ifreq ifopts;	/* set promiscuous mode */
-	//struct ifreq if_ip;	/* get ip addr */
-	uint8_t buf[BUF_SIZ];
-	char ifName[IFNAMSIZ];
 
-	uint32_t mode=0;// 0: TX, 1: RX
-
-	if (argc < 2 || (1 != sscanf(argv[1], "%u", &mode)))
-		mode = 0;
-	
-
-
-	//signal(SIGKILL,sig_handler);
-	//signal(SIGTERM,sig_handler);
-	
-	strcpy(ifName, DEFAULT_IF);
-
-	/* Header structures */
-	struct rx_pkt *eh = (struct rx_pkt *) buf;
-
-	//memset(&if_ip, 0, sizeof(struct ifreq));
+	//strcpy(ifName, DEFAULT_IF);
 
 	/* Open PF_PACKET socket, listening for EtherType ETHER_TYPE */
 	if ((sockfd = socket(PF_PACKET, SOCK_RAW, htons(ETHER_TYPE))) == -1) {
@@ -247,31 +238,98 @@ int main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 	}
 
+}
+
+int main(int argc, char *argv[])
+{
+	int sockfd, ret;
+	int sockopt;
+	ssize_t numbytes;
+	//struct ifreq ifopts;	/* set promiscuous mode */
+	//struct ifreq if_ip;	/* get ip addr */
+	uint8_t buf[BUF_SIZ];
+	char ifName[IFNAMSIZ];
+
+	uint32_t mode=0;// 0: TX, 1: RX
+
+	if (argc < 2 || (1 != sscanf(argv[1], "%u", &mode)))
+		mode = 0;
+	
+
+	//signal(SIGKILL,sig_handler);
+	//signal(SIGTERM,sig_handler);
+	
+	//strcpy(ifName, DEFAULT_IF);
+
+	/* Header structures */
+	struct rx_pkt *eh = (struct rx_pkt *) buf;
+
+	//memset(&if_ip, 0, sizeof(struct ifreq));
+	
+/*
+	// Open PF_PACKET socket, listening for EtherType ETHER_TYPE 
+	if ((sockfd = socket(PF_PACKET, SOCK_RAW, htons(ETHER_TYPE))) == -1) {
+		perror("listener: socket");	
+		return -1;
+	}
+
+	// Set interface to promiscuous mode - do we need to do this every time? 
+	strncpy(ifopts.ifr_name, ifName, IFNAMSIZ-1);
+	ioctl(sockfd, SIOCGIFFLAGS, &ifopts);
+	ifopts.ifr_flags |= IFF_PROMISC;
+	ioctl(sockfd, SIOCSIFFLAGS, &ifopts);
+	// Allow the socket to be reused - incase connection is closed prematurely 
+	if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &sockopt, sizeof sockopt) == -1) {
+		perror("setsockopt");
+		close(sockfd);
+		exit(EXIT_FAILURE);
+	}
+	// Make recv non-blocking
+	struct timeval read_timeout;
+	read_timeout.tv_sec = 0;
+	read_timeout.tv_usec = 10;
+	if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof(read_timeout)) == -1)	{
+		perror("SO_BINDTODEVICE");
+		close(sockfd);
+		exit(EXIT_FAILURE);
+	}
+
+	// Bind to device 
+	if (setsockopt(sockfd, SOL_SOCKET, SO_BINDTODEVICE, ifName, IFNAMSIZ-1) == -1)	{
+		perror("SO_BINDTODEVICE");
+		close(sockfd);
+		exit(EXIT_FAILURE);
+	}
+	*/
 	init_lorcon();
 	make_pkt();
 
 	struct timespec start, now;
 
-	uint16_t channels[32]={1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 149, 153, 157, 161, 165};
+	uint16_t channels[37]={1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 36, 40, 44, 48, 52, 56, 60, 64, 100, 104, 108, 112, 116, 120, 124, 128, 132, 136, 140, 149, 153, 157, 161, 165};
 
 	int i,j;
 	int numPkt = 10;
 	uint16_t curr_seq = 0;
-	uint32_t interval = 1000000;
-	int minPktsToRcv = 5;
+	uint32_t interval = 10e6;
+	int minPktsToRcv = 20;
 	int32_t diff = 0;
-	for (i=0;i<32;i++){
+	uint32_t index = 0;
+	for (i=0;i<37;i++){
 		set_channel(channels[i]);
 		clock_gettime(CLOCK_MONOTONIC, &start);
 		diff = 0;
-
-		if (mode == 0){
-			for (j=0;j<numPkt;j++){
-					send_pkt(j,channels[i]);
-			}
-		}
+		index = 0;
 		int pkts_rcvd = 0;
+
+		sockfd = setup_socket(ifName);
 		while(diff < interval){
+			if (mode == 0){
+				for (j=0;j<numPkt;j++){
+						send_pkt(index,channels[i]);
+						index += 1;
+				}
+			}
 			numbytes = recvfrom(sockfd, buf, BUF_SIZ, 0, NULL, NULL);
 			if (numbytes > 25) {
 				if (strncmp(eh->addr1,"\x00\x16\xea\x12\x34\x56",6) == 0 && strncmp(eh->addr2,"\x00\x16\xea\x12\x34\x56",6) == 0
@@ -291,6 +349,8 @@ int main(int argc, char *argv[])
 			//printf("diff %i\n",diff);
 		
 		}
+
+		close(sockfd);
 
 	}
 
